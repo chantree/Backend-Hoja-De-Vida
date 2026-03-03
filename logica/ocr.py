@@ -6,7 +6,7 @@ from openai import OpenAI
 
 app = FastAPI()
 
-BASE_PATH = r"C:\Users\chant\Desktop\vehiculos"
+BASE_PATH = os.getenv("BASE_PATH", "vehiculos")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ======================================

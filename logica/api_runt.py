@@ -9,7 +9,7 @@ import requests
 
 app = FastAPI()
 
-BASE_PATH = r"C:\Users\chant\Desktop\vehiculos"
+BASE_PATH = os.getenv("BASE_PATH", "vehiculos")
 
 
 @app.get("/validar/{placa}")
