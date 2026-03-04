@@ -77,8 +77,11 @@ def validar_runt(placa: str):
         with sync_playwright() as p:
 
             browser = p.chromium.launch(
-                headless=True,
-                args=["--disable-dev-shm-usage"]
+                headless=False,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage"
+                ]
             )
 
             context = browser.new_context(accept_downloads=True)
