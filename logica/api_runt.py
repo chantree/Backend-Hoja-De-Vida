@@ -37,9 +37,10 @@ def validar_runt(placa: str):
         return {"error": "No existe datos.json"}
 
     # ================================
-    # 🔥 EJECUTAR OCR AUTOMÁTICAMENTE
+    # EJECUTAR OCR AUTOMÁTICAMENTE
     # ================================
     if not os.path.exists(ruta_ocr):
+
         print("OCR no encontrado. Ejecutando OCR primero...")
 
         try:
@@ -48,6 +49,7 @@ def validar_runt(placa: str):
                 timeout=300
             )
             print("Respuesta OCR:", response.json())
+
         except Exception as e:
             return {"error": f"Error ejecutando OCR: {str(e)}"}
 
@@ -72,159 +74,175 @@ def validar_runt(placa: str):
     resultado = {}
 
     # ================================
-    # RUNT (NO TOCADO)
+    # RUNT
     # ================================
     with sync_playwright() as p:
 
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
+        )
+
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
 
-        print("Abriendo RUNT...")
-        page.goto(
-            "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
-            wait_until="domcontentloaded",
-            timeout=60000
-        )
-
-        page.wait_for_load_state("networkidle", timeout=60000)
-        page.wait_for_selector("input", timeout=60000)
-
-        placa_input = page.locator("input").first
-        placa_input.fill(placa)
-        placa_input.press("Tab")
-        page.wait_for_timeout(2000)
-
-        print("Esperando captcha manual...")
-
         try:
-            page.wait_for_selector(
-                "text=Información general del vehículo",
-                timeout=180000
+
+            print("Abriendo RUNT...")
+
+            page.goto(
+                "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
+                wait_until="domcontentloaded",
+                timeout=60000
             )
-        except PlaywrightTimeoutError:
-            browser.close()
-            return {"error": "No se completó captcha"}
 
-        print("Captcha resuelto.")
+            page.wait_for_load_state("networkidle", timeout=60000)
+            page.wait_for_selector("input", timeout=60000)
 
-        # =============================
-        # EXTRAER DATOS GENERALES
-        # =============================
-        datos = {}
-        bloques = page.locator("div").all_inner_texts()
+            placa_input = page.locator("input").first
+            placa_input.fill(placa)
+            placa_input.press("Tab")
 
-        for bloque in bloques:
-            lineas = bloque.split("\n")
-            lineas = [l.strip() for l in lineas if l.strip()]
-
-            for i in range(len(lineas) - 1):
-                clave = lineas[i]
-                valor = lineas[i + 1]
-
-                if ":" in clave:
-                    datos[clave] = valor
-
-        # =============================
-        # RTM – DESCARGAR Y LEER PDF
-        # =============================
-        print("Abriendo acordeón RTM...")
-
-        acordeon_rtm = page.locator(
-            "text=Certificado de revisión técnico mecánica"
-        ).first
-
-        rtm_actual = {}
-        rtm_lista = []
-
-        if acordeon_rtm.count() > 0:
-            acordeon_rtm.click()
             page.wait_for_timeout(2000)
 
-            boton_descarga = page.locator(
-                "button[mattooltip='Descargar']"
+            print("Esperando captcha manual...")
+
+            try:
+                page.wait_for_selector(
+                    "text=Información general del vehículo",
+                    timeout=180000
+                )
+
+            except PlaywrightTimeoutError:
+                return {"error": "No se completó captcha"}
+
+            print("Captcha resuelto.")
+
+            # =============================
+            # EXTRAER DATOS
+            # =============================
+            datos = {}
+            bloques = page.locator("div").all_inner_texts()
+
+            for bloque in bloques:
+
+                lineas = bloque.split("\n")
+                lineas = [l.strip() for l in lineas if l.strip()]
+
+                for i in range(len(lineas) - 1):
+
+                    clave = lineas[i]
+                    valor = lineas[i + 1]
+
+                    if ":" in clave:
+                        datos[clave] = valor
+
+            # =============================
+            # RTM – PDF
+            # =============================
+            print("Abriendo acordeón RTM...")
+
+            acordeon_rtm = page.locator(
+                "text=Certificado de revisión técnico mecánica"
             ).first
 
-            if boton_descarga.count() > 0:
+            rtm_actual = {}
+            rtm_lista = []
 
-                with page.expect_download() as download_info:
-                    boton_descarga.click()
+            if acordeon_rtm.count() > 0:
 
-                download = download_info.value
+                acordeon_rtm.click()
+                page.wait_for_timeout(2000)
 
-                ruta_pdf = os.path.join(
-                    carpeta,
-                    "revision_tecnomecanica.pdf"
-                )
+                boton_descarga = page.locator(
+                    "button[mattooltip='Descargar']"
+                ).first
 
-                download.save_as(ruta_pdf)
+                if boton_descarga.count() > 0:
 
-                with pdfplumber.open(ruta_pdf) as pdf:
-                    texto = ""
-                    for pagina in pdf.pages:
-                        contenido = pagina.extract_text()
-                        if contenido:
-                            texto += contenido + "\n"
+                    with page.expect_download() as download_info:
+                        boton_descarga.click()
 
-                cda = re.search(
-                    r"Entidad\s+que\s+expide\s+el\s+certificado:\s*(.*)",
-                    texto,
-                    re.IGNORECASE
-                )
+                    download = download_info.value
 
-                cert = re.search(
-                    r"No\.\s*([0-9]+)",
-                    texto,
-                    re.IGNORECASE
-                )
+                    ruta_pdf = os.path.join(
+                        carpeta,
+                        "revision_tecnomecanica.pdf"
+                    )
 
-                exp = re.search(
-                    r"Fecha\s*de\s*expedici[oó]n:\s*([0-9/]+)",
-                    texto,
-                    re.IGNORECASE
-                )
+                    download.save_as(ruta_pdf)
 
-                vig = re.search(
-                    r"Fecha\s*de\s*vencimiento:\s*([0-9/]+)",
-                    texto,
-                    re.IGNORECASE
-                )
+                    with pdfplumber.open(ruta_pdf) as pdf:
 
-                if cda:
-                    rtm_actual["centro_diagnostico"] = cda.group(1).strip()
+                        texto = ""
 
-                if cert:
-                    rtm_actual["numero_certificado"] = cert.group(1).strip()
+                        for pagina in pdf.pages:
 
-                if exp:
-                    rtm_actual["fecha_expedicion"] = exp.group(1)
+                            contenido = pagina.extract_text()
 
-                if vig:
-                    rtm_actual["fecha_vencimiento"] = vig.group(1)
+                            if contenido:
+                                texto += contenido + "\n"
 
-                rtm_lista = [rtm_actual] if rtm_actual else []
+                    cda = re.search(
+                        r"Entidad\s+que\s+expide\s+el\s+certificado:\s*(.*)",
+                        texto,
+                        re.IGNORECASE
+                    )
 
-        resultado["runt"] = {
-            "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
-            "marca": datos.get("MARCA:", ""),
-            "linea": datos.get("LÍNEA:", ""),
-            "modelo": datos.get("MODELO:", ""),
-            "color": datos.get("COLOR:", ""),
-            "clase": datos.get("CLASE DE VEHÍCULO:", ""),
-            "servicio": datos.get("TIPO DE SERVICIO:", ""),
-            "combustible": datos.get("TIPO COMBUSTIBLE:", ""),
-            "cilindraje": datos.get("CILINDRAJE:", ""),
-            "motor": datos.get("NÚMERO DE MOTOR:", ""),
-            "chasis": datos.get("NÚMERO DE CHASIS:", ""),
-            "vin": datos.get("NÚMERO DE VIN:", ""),
-            "carroceria": datos.get("TIPO DE CARROCERÍA:", ""),
-            "revision_tecnomecanica": {
-                "actual": rtm_actual,
-                "historial": rtm_lista
-            }
+                    cert = re.search(
+                        r"No\.\s*([0-9]+)",
+                        texto,
+                        re.IGNORECASE
+                    )
+
+                    exp = re.search(
+                        r"Fecha\s*de\s*expedici[oó]n:\s*([0-9/]+)",
+                        texto,
+                        re.IGNORECASE
+                    )
+
+                    vig = re.search(
+                        r"Fecha\s*de\s*vencimiento:\s*([0-9/]+)",
+                        texto,
+                        re.IGNORECASE
+                    )
+
+                    if cda:
+                        rtm_actual["centro_diagnostico"] = cda.group(1).strip()
+
+                    if cert:
+                        rtm_actual["numero_certificado"] = cert.group(1).strip()
+
+                    if exp:
+                        rtm_actual["fecha_expedicion"] = exp.group(1)
+
+                    if vig:
+                        rtm_actual["fecha_vencimiento"] = vig.group(1)
+
+                    rtm_lista = [rtm_actual] if rtm_actual else []
+
+        finally:
+            browser.close()
+
+    resultado["runt"] = {
+        "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
+        "marca": datos.get("MARCA:", ""),
+        "linea": datos.get("LÍNEA:", ""),
+        "modelo": datos.get("MODELO:", ""),
+        "color": datos.get("COLOR:", ""),
+        "clase": datos.get("CLASE DE VEHÍCULO:", ""),
+        "servicio": datos.get("TIPO DE SERVICIO:", ""),
+        "combustible": datos.get("TIPO COMBUSTIBLE:", ""),
+        "cilindraje": datos.get("CILINDRAJE:", ""),
+        "motor": datos.get("NÚMERO DE MOTOR:", ""),
+        "chasis": datos.get("NÚMERO DE CHASIS:", ""),
+        "vin": datos.get("NÚMERO DE VIN:", ""),
+        "carroceria": datos.get("TIPO DE CARROCERÍA:", ""),
+        "revision_tecnomecanica": {
+            "actual": rtm_actual,
+            "historial": rtm_lista
         }
-
-        browser.close()
+    }
 
     # =============================
     # DIFERENCIAS
