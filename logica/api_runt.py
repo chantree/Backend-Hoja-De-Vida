@@ -87,11 +87,9 @@ def validar_runt(placa: str):
             browser = p.chromium.launch(
                 headless=False,
                 args=[
-                    "--remote-debugging-port=9222",
-                    "--remote-debugging-address=0.0.0.0",
                     "--disable-dev-shm-usage"
                 ]
-            )   
+            )
 
             context = browser.new_context(accept_downloads=True)
             page = context.new_page()
