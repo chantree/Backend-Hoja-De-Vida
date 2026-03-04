@@ -80,8 +80,8 @@ def validar_runt(placa: str):
                 "http://127.0.0.1:9222"
         )
 
-            context = browser.new_context(accept_downloads=True)
-            page = context.new_page()
+            context = browser.contexts[0]
+            page = context.pages[0]
 
             try:
 
@@ -219,7 +219,7 @@ def validar_runt(placa: str):
                         rtm_lista = [rtm_actual] if rtm_actual else []
 
             finally:
-                browser.close()
+                pass
 
     resultado["runt"] = {
         "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
