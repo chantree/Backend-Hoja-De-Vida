@@ -80,8 +80,7 @@ def validar_runt(placa: str):
                 headless=False,
                 args=[
                     "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--display=:1"
+                    "--disable-dev-shm-usage"
                 ]
             )
 
@@ -90,32 +89,28 @@ def validar_runt(placa: str):
 
             try:
 
-                print("===================================")
-                print("ABRIENDO RUNT")
-                print("===================================")
+                print("Abriendo RUNT...")
 
                 page.goto(
                     "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
-                    wait_until="domcontentloaded",
-                    timeout=60000
+                    wait_until="networkidle",
+                    timeout=120000
                 )
 
-                print("===================================")
-                print("ABRE ESTA URL PARA RESOLVER CAPTCHA")
-                print(page.url)
-                print("===================================")
+                print("Página cargada")
 
-                page.wait_for_timeout(5000)
-
-                page.wait_for_selector("input", timeout=60000)
+                # Esperar Angular
+                page.wait_for_timeout(8000)
 
                 placa_input = page.locator("input").first
+                placa_input.wait_for(timeout=120000)
+
+                print("Input encontrado")
+
                 placa_input.fill(placa)
                 placa_input.press("Tab")
 
-                page.wait_for_timeout(2000)
-
-                print("Esperando que completes captcha...")
+                print("Esperando captcha...")
 
                 try:
                     page.wait_for_selector(
@@ -128,6 +123,9 @@ def validar_runt(placa: str):
 
                 print("Captcha resuelto.")
 
+                # =============================
+                # EXTRAER DATOS
+                # =============================
                 datos = {}
 
                 bloques = page.locator("div").all_inner_texts()
@@ -144,6 +142,10 @@ def validar_runt(placa: str):
 
                         if ":" in clave:
                             datos[clave] = valor
+
+                # =============================
+                # RTM PDF
+                # =============================
 
                 print("Buscando RTM...")
 
@@ -227,7 +229,7 @@ def validar_runt(placa: str):
                         rtm_lista = [rtm_actual] if rtm_actual else []
 
             finally:
-                browser.close()
+                print("Proceso terminado")
 
     resultado["runt"] = {
         "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
