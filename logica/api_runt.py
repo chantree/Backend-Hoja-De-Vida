@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from datetime import datetime, timedelta
 import os
 import json
 import re
 import pdfplumber
-import requests  
+import requests
 
 app = FastAPI()
 
@@ -78,10 +77,8 @@ def validar_runt(placa: str):
     # ================================
     with sync_playwright() as p:
 
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
-        )
+        # IMPORTANTE: navegador visible para captcha
+        browser = p.chromium.launch(headless=False)
 
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
@@ -269,9 +266,6 @@ def validar_runt(placa: str):
     resultado["diferencias_rojas"] = diferencias_rojas
     resultado["diferencias_amarillas"] = diferencias_amarillas
 
-    # =============================
-    # GUARDAR RUNT
-    # =============================
     ruta_runt = os.path.join(carpeta, "runt_resultado.json")
 
     with open(ruta_runt, "w", encoding="utf-8") as f:
