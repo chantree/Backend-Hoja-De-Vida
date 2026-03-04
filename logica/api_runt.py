@@ -84,7 +84,10 @@ def validar_runt(placa: str):
         with sync_playwright() as p:
 
             # IMPORTANTE: navegador visible para captcha
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(
+                     headless=False,
+                    args=["--remote-debugging-port=9222", "--disable-dev-shm-usage"]
+                )
 
             context = browser.new_context(accept_downloads=True)
             page = context.new_page()
