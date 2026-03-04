@@ -77,10 +77,8 @@ def validar_runt(placa: str):
         with sync_playwright() as p:
 
             browser = p.chromium.launch(
-                headless=False,
-                args=[
-                    "--disable-dev-shm-usage"
-                ]
+                headless=True,
+                args=["--disable-dev-shm-usage"]
             )
 
             context = browser.new_context(accept_downloads=True)
@@ -89,8 +87,7 @@ def validar_runt(placa: str):
             try:
 
                 print("===================================")
-                print("Abriendo RUNT...")
-                print("Resuelve el captcha manualmente.")
+                print("ABRIENDO RUNT")
                 print("===================================")
 
                 page.goto(
@@ -98,6 +95,11 @@ def validar_runt(placa: str):
                     wait_until="domcontentloaded",
                     timeout=60000
                 )
+
+                print("===================================")
+                print("ABRE ESTA URL PARA RESOLVER CAPTCHA")
+                print(page.url)
+                print("===================================")
 
                 page.wait_for_timeout(5000)
 
@@ -108,6 +110,8 @@ def validar_runt(placa: str):
                 placa_input.press("Tab")
 
                 page.wait_for_timeout(2000)
+
+                print("Esperando que completes captcha...")
 
                 try:
                     page.wait_for_selector(
@@ -137,9 +141,6 @@ def validar_runt(placa: str):
                         if ":" in clave:
                             datos[clave] = valor
 
-                # =============================
-                # RTM PDF
-                # =============================
                 print("Buscando RTM...")
 
                 acordeon_rtm = page.locator(
@@ -243,28 +244,6 @@ def validar_runt(placa: str):
             "historial": rtm_lista
         }
     }
-
-    diferencias_rojas = []
-    diferencias_amarillas = []
-
-    if tarjeta.get("clase", "").upper() != resultado["runt"]["clase"].upper():
-        diferencias_rojas.append("Clase no coincide")
-
-    if tarjeta.get("servicio", "").upper() != resultado["runt"]["servicio"].upper():
-        diferencias_rojas.append("Servicio no coincide")
-
-    if tarjeta.get("vin", "").upper() != resultado["runt"]["vin"].upper():
-        diferencias_amarillas.append("VIN no coincide")
-
-    if tarjeta.get("motor", "").upper() != resultado["runt"]["motor"].upper():
-        diferencias_amarillas.append("Motor no coincide")
-
-    if tarjeta.get("tipo_carroceria", "").upper() != resultado["runt"]["carroceria"].upper():
-        diferencias_rojas.append("Carrocería no coincide")
-
-    resultado["alerta"] = len(diferencias_rojas) > 0
-    resultado["diferencias_rojas"] = diferencias_rojas
-    resultado["diferencias_amarillas"] = diferencias_amarillas
 
     ruta_runt = os.path.join(carpeta, "runt_resultado.json")
 
