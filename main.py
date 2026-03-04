@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from logica.api_runt import app as runt_app
 from logica.api_sisconmp import app as sisconmp_app
+import os
 
 app = FastAPI()
 
