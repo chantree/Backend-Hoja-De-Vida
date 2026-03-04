@@ -64,7 +64,7 @@ class Conductor(BaseModel):
 # CONFIG
 # =========================
 
-BASE_PATH = os.getenv("BASE_PATH", "vehiculos")
+BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 
 # =========================
 # FUNCION GUARDAR IMAGEN

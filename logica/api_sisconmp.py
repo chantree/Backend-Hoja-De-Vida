@@ -6,7 +6,7 @@ import re
 
 app = FastAPI()
 
-BASE_PATH = os.getenv("BASE_PATH", "vehiculos")
+BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 
 
 @app.get("/validar/{placa}")

@@ -8,6 +8,8 @@ from logica.api_sisconmp import app as sisconmp_app
 
 app = FastAPI()
 
+BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
+
 # ✅ CORS (MUY IMPORTANTE)
 app.add_middleware(
     CORSMiddleware,
@@ -22,7 +24,7 @@ app.add_middleware(
 
 app.mount(
     "/vehiculos",
-    StaticFiles(directory=r"C:\Users\chant\Desktop\vehiculos"),
+    StaticFiles(directory=BASE_PATH),
     name="vehiculos",
 )
 
