@@ -11,7 +11,6 @@ app = FastAPI()
 
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 
-# 🔒 LOCK PARA CONTROLAR PLAYWRIGHT
 playwright_lock = threading.Lock()
 
 
@@ -20,9 +19,6 @@ def validar_runt(placa: str):
 
     placa = placa.upper().replace(" ", "")
 
-    # ================================
-    # CARPETAS OK / PENDIENTE
-    # ================================
     carpeta_ok = os.path.join(BASE_PATH, f"{placa}_OK")
     carpeta_pendiente = os.path.join(BASE_PATH, f"{placa}_PENDIENTE")
 
@@ -40,11 +36,11 @@ def validar_runt(placa: str):
         return {"error": "No existe datos.json"}
 
     # ================================
-    # EJECUTAR OCR AUTOMÁTICAMENTE
+    # OCR AUTOMATICO
     # ================================
     if not os.path.exists(ruta_ocr):
 
-        print("OCR no encontrado. Ejecutando OCR primero...")
+        print("OCR no encontrado. Ejecutando OCR...")
 
         try:
             response = requests.get(
@@ -59,9 +55,6 @@ def validar_runt(placa: str):
         if not os.path.exists(ruta_ocr):
             return {"error": "OCR no se generó correctamente"}
 
-    # ================================
-    # CARGAR DATOS
-    # ================================
     with open(ruta_datos, "r", encoding="utf-8") as f:
         datos_guardados = json.load(f)
 
@@ -77,13 +70,12 @@ def validar_runt(placa: str):
     resultado = {}
 
     # ================================
-    # RUNT
+    # PLAYWRIGHT
     # ================================
-    with playwright_lock:   # 🔒 SOLO UN PLAYWRIGHT A LA VEZ
+    with playwright_lock:
 
         with sync_playwright() as p:
 
-            # IMPORTANTE: navegador visible para captcha
             browser = p.chromium.launch(
                 headless=False,
                 args=[
@@ -96,7 +88,10 @@ def validar_runt(placa: str):
 
             try:
 
+                print("===================================")
                 print("Abriendo RUNT...")
+                print("Resuelve el captcha manualmente.")
+                print("===================================")
 
                 page.goto(
                     "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
@@ -114,12 +109,10 @@ def validar_runt(placa: str):
 
                 page.wait_for_timeout(2000)
 
-                print("Esperando captcha manual...")
-
                 try:
                     page.wait_for_selector(
                         "text=Información general del vehículo",
-                        timeout=180000
+                        timeout=600000
                     )
 
                 except PlaywrightTimeoutError:
@@ -127,10 +120,8 @@ def validar_runt(placa: str):
 
                 print("Captcha resuelto.")
 
-                # =============================
-                # EXTRAER DATOS
-                # =============================
                 datos = {}
+
                 bloques = page.locator("div").all_inner_texts()
 
                 for bloque in bloques:
@@ -147,9 +138,9 @@ def validar_runt(placa: str):
                             datos[clave] = valor
 
                 # =============================
-                # RTM – PDF
+                # RTM PDF
                 # =============================
-                print("Abriendo acordeón RTM...")
+                print("Buscando RTM...")
 
                 acordeon_rtm = page.locator(
                     "text=Certificado de revisión técnico mecánica"
@@ -253,9 +244,6 @@ def validar_runt(placa: str):
         }
     }
 
-    # =============================
-    # DIFERENCIAS
-    # =============================
     diferencias_rojas = []
     diferencias_amarillas = []
 
