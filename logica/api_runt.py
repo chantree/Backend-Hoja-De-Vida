@@ -76,41 +76,35 @@ def validar_runt(placa: str):
 
         with sync_playwright() as p:
 
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage"
-                ]
-            )
+            browser = p.chromium.connect_over_cdp(
+                "http://127.0.0.1:9222"
+        )
 
             context = browser.new_context(accept_downloads=True)
             page = context.new_page()
 
             try:
 
+                print("===================================")
                 print("Abriendo RUNT...")
+                print("Resuelve el captcha manualmente.")
+                print("===================================")
 
                 page.goto(
                     "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
-                    wait_until="networkidle",
-                    timeout=120000
+                    wait_until="domcontentloaded",
+                    timeout=60000
                 )
 
-                print("Página cargada")
+                page.wait_for_timeout(5000)
 
-                # Esperar Angular
-                page.wait_for_timeout(8000)
+                page.wait_for_selector("input", timeout=60000)
 
                 placa_input = page.locator("input").first
-                placa_input.wait_for(timeout=120000)
-
-                print("Input encontrado")
-
                 placa_input.fill(placa)
                 placa_input.press("Tab")
 
-                print("Esperando captcha...")
+                page.wait_for_timeout(2000)
 
                 try:
                     page.wait_for_selector(
@@ -123,9 +117,6 @@ def validar_runt(placa: str):
 
                 print("Captcha resuelto.")
 
-                # =============================
-                # EXTRAER DATOS
-                # =============================
                 datos = {}
 
                 bloques = page.locator("div").all_inner_texts()
@@ -146,7 +137,6 @@ def validar_runt(placa: str):
                 # =============================
                 # RTM PDF
                 # =============================
-
                 print("Buscando RTM...")
 
                 acordeon_rtm = page.locator(
@@ -229,7 +219,7 @@ def validar_runt(placa: str):
                         rtm_lista = [rtm_actual] if rtm_actual else []
 
             finally:
-                print("Proceso terminado")
+                browser.close()
 
     resultado["runt"] = {
         "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
@@ -250,6 +240,28 @@ def validar_runt(placa: str):
             "historial": rtm_lista
         }
     }
+
+    diferencias_rojas = []
+    diferencias_amarillas = []
+
+    if tarjeta.get("clase", "").upper() != resultado["runt"]["clase"].upper():
+        diferencias_rojas.append("Clase no coincide")
+
+    if tarjeta.get("servicio", "").upper() != resultado["runt"]["servicio"].upper():
+        diferencias_rojas.append("Servicio no coincide")
+
+    if tarjeta.get("vin", "").upper() != resultado["runt"]["vin"].upper():
+        diferencias_amarillas.append("VIN no coincide")
+
+    if tarjeta.get("motor", "").upper() != resultado["runt"]["motor"].upper():
+        diferencias_amarillas.append("Motor no coincide")
+
+    if tarjeta.get("tipo_carroceria", "").upper() != resultado["runt"]["carroceria"].upper():
+        diferencias_rojas.append("Carrocería no coincide")
+
+    resultado["alerta"] = len(diferencias_rojas) > 0
+    resultado["diferencias_rojas"] = diferencias_rojas
+    resultado["diferencias_amarillas"] = diferencias_amarillas
 
     ruta_runt = os.path.join(carpeta, "runt_resultado.json")
 
