@@ -5,10 +5,14 @@ import json
 import re
 import pdfplumber
 import requests
+import threading
 
 app = FastAPI()
 
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
+
+# 🔒 LOCK PARA CONTROLAR PLAYWRIGHT
+playwright_lock = threading.Lock()
 
 
 @app.get("/validar/{placa}")
@@ -75,151 +79,153 @@ def validar_runt(placa: str):
     # ================================
     # RUNT
     # ================================
-    with sync_playwright() as p:
+    with playwright_lock:   # 🔒 SOLO UN PLAYWRIGHT A LA VEZ
 
-        # IMPORTANTE: navegador visible para captcha
-        browser = p.chromium.launch(headless=False)
+        with sync_playwright() as p:
 
-        context = browser.new_context(accept_downloads=True)
-        page = context.new_page()
+            # IMPORTANTE: navegador visible para captcha
+            browser = p.chromium.launch(headless=False)
 
-        try:
-
-            print("Abriendo RUNT...")
-
-            page.goto(
-                "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
-                wait_until="domcontentloaded",
-                timeout=60000
-            )
-
-            page.wait_for_load_state("networkidle", timeout=60000)
-            page.wait_for_selector("input", timeout=60000)
-
-            placa_input = page.locator("input").first
-            placa_input.fill(placa)
-            placa_input.press("Tab")
-
-            page.wait_for_timeout(2000)
-
-            print("Esperando captcha manual...")
+            context = browser.new_context(accept_downloads=True)
+            page = context.new_page()
 
             try:
-                page.wait_for_selector(
-                    "text=Información general del vehículo",
-                    timeout=180000
+
+                print("Abriendo RUNT...")
+
+                page.goto(
+                    "https://portalpublico.runt.gov.co/#/consulta-vehiculo/consulta/consulta-ciudadana",
+                    wait_until="domcontentloaded",
+                    timeout=60000
                 )
 
-            except PlaywrightTimeoutError:
-                return {"error": "No se completó captcha"}
+                page.wait_for_load_state("networkidle", timeout=60000)
+                page.wait_for_selector("input", timeout=60000)
 
-            print("Captcha resuelto.")
+                placa_input = page.locator("input").first
+                placa_input.fill(placa)
+                placa_input.press("Tab")
 
-            # =============================
-            # EXTRAER DATOS
-            # =============================
-            datos = {}
-            bloques = page.locator("div").all_inner_texts()
-
-            for bloque in bloques:
-
-                lineas = bloque.split("\n")
-                lineas = [l.strip() for l in lineas if l.strip()]
-
-                for i in range(len(lineas) - 1):
-
-                    clave = lineas[i]
-                    valor = lineas[i + 1]
-
-                    if ":" in clave:
-                        datos[clave] = valor
-
-            # =============================
-            # RTM – PDF
-            # =============================
-            print("Abriendo acordeón RTM...")
-
-            acordeon_rtm = page.locator(
-                "text=Certificado de revisión técnico mecánica"
-            ).first
-
-            rtm_actual = {}
-            rtm_lista = []
-
-            if acordeon_rtm.count() > 0:
-
-                acordeon_rtm.click()
                 page.wait_for_timeout(2000)
 
-                boton_descarga = page.locator(
-                    "button[mattooltip='Descargar']"
+                print("Esperando captcha manual...")
+
+                try:
+                    page.wait_for_selector(
+                        "text=Información general del vehículo",
+                        timeout=180000
+                    )
+
+                except PlaywrightTimeoutError:
+                    return {"error": "No se completó captcha"}
+
+                print("Captcha resuelto.")
+
+                # =============================
+                # EXTRAER DATOS
+                # =============================
+                datos = {}
+                bloques = page.locator("div").all_inner_texts()
+
+                for bloque in bloques:
+
+                    lineas = bloque.split("\n")
+                    lineas = [l.strip() for l in lineas if l.strip()]
+
+                    for i in range(len(lineas) - 1):
+
+                        clave = lineas[i]
+                        valor = lineas[i + 1]
+
+                        if ":" in clave:
+                            datos[clave] = valor
+
+                # =============================
+                # RTM – PDF
+                # =============================
+                print("Abriendo acordeón RTM...")
+
+                acordeon_rtm = page.locator(
+                    "text=Certificado de revisión técnico mecánica"
                 ).first
 
-                if boton_descarga.count() > 0:
+                rtm_actual = {}
+                rtm_lista = []
 
-                    with page.expect_download() as download_info:
-                        boton_descarga.click()
+                if acordeon_rtm.count() > 0:
 
-                    download = download_info.value
+                    acordeon_rtm.click()
+                    page.wait_for_timeout(2000)
 
-                    ruta_pdf = os.path.join(
-                        carpeta,
-                        "revision_tecnomecanica.pdf"
-                    )
+                    boton_descarga = page.locator(
+                        "button[mattooltip='Descargar']"
+                    ).first
 
-                    download.save_as(ruta_pdf)
+                    if boton_descarga.count() > 0:
 
-                    with pdfplumber.open(ruta_pdf) as pdf:
+                        with page.expect_download() as download_info:
+                            boton_descarga.click()
 
-                        texto = ""
+                        download = download_info.value
 
-                        for pagina in pdf.pages:
+                        ruta_pdf = os.path.join(
+                            carpeta,
+                            "revision_tecnomecanica.pdf"
+                        )
 
-                            contenido = pagina.extract_text()
+                        download.save_as(ruta_pdf)
 
-                            if contenido:
-                                texto += contenido + "\n"
+                        with pdfplumber.open(ruta_pdf) as pdf:
 
-                    cda = re.search(
-                        r"Entidad\s+que\s+expide\s+el\s+certificado:\s*(.*)",
-                        texto,
-                        re.IGNORECASE
-                    )
+                            texto = ""
 
-                    cert = re.search(
-                        r"No\.\s*([0-9]+)",
-                        texto,
-                        re.IGNORECASE
-                    )
+                            for pagina in pdf.pages:
 
-                    exp = re.search(
-                        r"Fecha\s*de\s*expedici[oó]n:\s*([0-9/]+)",
-                        texto,
-                        re.IGNORECASE
-                    )
+                                contenido = pagina.extract_text()
 
-                    vig = re.search(
-                        r"Fecha\s*de\s*vencimiento:\s*([0-9/]+)",
-                        texto,
-                        re.IGNORECASE
-                    )
+                                if contenido:
+                                    texto += contenido + "\n"
 
-                    if cda:
-                        rtm_actual["centro_diagnostico"] = cda.group(1).strip()
+                        cda = re.search(
+                            r"Entidad\s+que\s+expide\s+el\s+certificado:\s*(.*)",
+                            texto,
+                            re.IGNORECASE
+                        )
 
-                    if cert:
-                        rtm_actual["numero_certificado"] = cert.group(1).strip()
+                        cert = re.search(
+                            r"No\.\s*([0-9]+)",
+                            texto,
+                            re.IGNORECASE
+                        )
 
-                    if exp:
-                        rtm_actual["fecha_expedicion"] = exp.group(1)
+                        exp = re.search(
+                            r"Fecha\s*de\s*expedici[oó]n:\s*([0-9/]+)",
+                            texto,
+                            re.IGNORECASE
+                        )
 
-                    if vig:
-                        rtm_actual["fecha_vencimiento"] = vig.group(1)
+                        vig = re.search(
+                            r"Fecha\s*de\s*vencimiento:\s*([0-9/]+)",
+                            texto,
+                            re.IGNORECASE
+                        )
 
-                    rtm_lista = [rtm_actual] if rtm_actual else []
+                        if cda:
+                            rtm_actual["centro_diagnostico"] = cda.group(1).strip()
 
-        finally:
-            browser.close()
+                        if cert:
+                            rtm_actual["numero_certificado"] = cert.group(1).strip()
+
+                        if exp:
+                            rtm_actual["fecha_expedicion"] = exp.group(1)
+
+                        if vig:
+                            rtm_actual["fecha_vencimiento"] = vig.group(1)
+
+                        rtm_lista = [rtm_actual] if rtm_actual else []
+
+            finally:
+                browser.close()
 
     resultado["runt"] = {
         "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
