@@ -99,7 +99,8 @@ def validar_runt(placa: str):
                     timeout=60000
                 )
 
-                page.wait_for_load_state("networkidle", timeout=60000)
+                page.wait_for_timeout(5000)
+
                 page.wait_for_selector("input", timeout=60000)
 
                 placa_input = page.locator("input").first
