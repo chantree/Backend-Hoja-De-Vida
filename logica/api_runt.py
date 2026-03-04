@@ -81,8 +81,11 @@ def validar_runt(placa: str):
         )
 
             context = browser.contexts[0]
-            page = context.pages[0]
 
+            if len(context.pages) == 0:
+                page = context.new_page()
+            else:
+                page = context.pages[0]
             try:
 
                 print("===================================")
