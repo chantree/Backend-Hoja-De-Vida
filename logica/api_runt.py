@@ -80,7 +80,8 @@ def validar_runt(placa: str):
                 headless=False,
                 args=[
                     "--no-sandbox",
-                    "--disable-dev-shm-usage"
+                    "--disable-dev-shm-usage",
+                    "--display=:1"
                 ]
             )
 
