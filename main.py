@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from logica.api_runt import app as runt_app
 from logica.api_sisconmp import app as sisconmp_app
 from logica.cola import router as cola_router
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 app = FastAPI()
@@ -19,7 +20,7 @@ app.add_middleware(
     allow_origins=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://formulario-transporte-nueva-colombi-kappa.vercel.app"
+    "https://formulario-transporte-nueva-colombi.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
