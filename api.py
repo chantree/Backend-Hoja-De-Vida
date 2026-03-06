@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from docx import Document
 from docx.shared import Inches
 from datetime import datetime
@@ -41,11 +41,13 @@ class Referencia(BaseModel):
     telefono: str
     parentesco: str
 
+
 class Propietario(BaseModel):
     nombre: str
     documento: str
     telefono: str
     correo: str
+
 
 class Conductor(BaseModel):
     placa: str
@@ -55,18 +57,19 @@ class Conductor(BaseModel):
     celular: str
     correo: str
 
-    foto_selfie: str
-    cedula_frontal: str
-    cedula_trasera: str
-    licencia_frontal: str
-    licencia_trasera: str
-    tarjeta_propiedad_frontal: str
-    tarjeta_propiedad_trasera: str
-    vehiculo_frontal: str
-    vehiculo_trasero: str
+    foto_selfie: Optional[str] = None
+    cedula_frontal: Optional[str] = None
+    cedula_trasera: Optional[str] = None
+    licencia_frontal: Optional[str] = None
+    licencia_trasera: Optional[str] = None
+    tarjeta_propiedad_frontal: Optional[str] = None
+    tarjeta_propiedad_trasera: Optional[str] = None
+    vehiculo_frontal: Optional[str] = None
+    vehiculo_trasero: Optional[str] = None
 
     propietario: Propietario
     referencias: List[Referencia]
+
 
 # =========================
 # ROOT
@@ -75,6 +78,7 @@ class Conductor(BaseModel):
 @app.get("/")
 def root():
     return {"status": "API Transporte Nueva Colombia activa"}
+
 
 # =========================
 # UPLOAD (NECESARIO PARA FRONTEND)
@@ -94,6 +98,7 @@ async def upload(file: UploadFile = File(...)):
         "status": "ok",
         "archivo": file.filename
     }
+
 
 # =========================
 # FUNCION GUARDAR IMAGEN
@@ -130,6 +135,7 @@ def guardar_imagen(data, ruta):
 
     except:
         return
+
 
 # =========================
 # CREAR HOJA VIDA
@@ -174,6 +180,7 @@ def registrar_hoja_vida(data: Conductor):
         "carpeta": carpeta_base
     }
 
+
 # =========================
 # OBTENER FICHA
 # =========================
@@ -217,6 +224,7 @@ def obtener_ficha(placa: str):
             datos["estado"] = json.load(f)
 
     return datos
+
 
 # =========================
 # GENERAR WORD
