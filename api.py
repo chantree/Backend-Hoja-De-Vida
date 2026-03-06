@@ -1,21 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
+from docx import Document
+from docx.shared import Inches
+from datetime import datetime
+
 import os
 import json
 import requests
 import base64
-from fastapi.responses import FileResponse
-from docx import Document
-from docx.shared import Inches
-from datetime import datetime  # 🔥 NUEVO
 
 app = FastAPI()
 
 # =========================
 # CORS
 # =========================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,6 +25,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# =========================
+# CONFIG
+# =========================
+
+BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 
 # =========================
 # MODELOS
@@ -61,10 +69,31 @@ class Conductor(BaseModel):
     referencias: List[Referencia]
 
 # =========================
-# CONFIG
+# ROOT
 # =========================
 
-BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
+@app.get("/")
+def root():
+    return {"status": "API Transporte Nueva Colombia activa"}
+
+# =========================
+# UPLOAD (NECESARIO PARA FRONTEND)
+# =========================
+
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
+
+    os.makedirs(BASE_PATH, exist_ok=True)
+
+    file_path = os.path.join(BASE_PATH, file.filename)
+
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    return {
+        "status": "ok",
+        "archivo": file.filename
+    }
 
 # =========================
 # FUNCION GUARDAR IMAGEN
@@ -86,6 +115,7 @@ def guardar_imagen(data, ruta):
             return
 
     try:
+
         if "," in data:
             data = data.split(",")[1]
 
@@ -100,14 +130,6 @@ def guardar_imagen(data, ruta):
 
     except:
         return
-
-# =========================
-# ROOT
-# =========================
-
-@app.get("/")
-def root():
-    return {"status": "API Transporte Nueva Colombia activa"}
 
 # =========================
 # CREAR HOJA VIDA
@@ -125,11 +147,9 @@ def registrar_hoja_vida(data: Conductor):
     os.makedirs(os.path.join(carpeta_base, "vehiculo"), exist_ok=True)
     os.makedirs(os.path.join(carpeta_base, "propietario"), exist_ok=True)
 
-    # Guardar JSON
     with open(os.path.join(carpeta_base, "datos.json"), "w", encoding="utf-8") as f:
         json.dump(data.dict(), f, indent=4, ensure_ascii=False)
 
-    # 🔥 Crear estado inicial
     estado_inicial = {
         "word_generado": False,
         "fecha_generacion": None
@@ -138,7 +158,6 @@ def registrar_hoja_vida(data: Conductor):
     with open(os.path.join(carpeta_base, "estado.json"), "w", encoding="utf-8") as f:
         json.dump(estado_inicial, f, indent=4)
 
-    # Guardar imágenes
     guardar_imagen(data.foto_selfie, os.path.join(carpeta_base,"conductor","selfie.jpg"))
     guardar_imagen(data.cedula_frontal, os.path.join(carpeta_base,"conductor","cedula_frontal.jpg"))
     guardar_imagen(data.cedula_trasera, os.path.join(carpeta_base,"conductor","cedula_trasera.jpg"))
@@ -181,8 +200,6 @@ def obtener_ficha(placa: str):
 
     with open(ruta_datos, "r", encoding="utf-8") as f:
         datos = json.load(f)
-
-    # 🔥 Agregamos OCR y RUNT sin cambiar estructura original
 
     ruta_ocr = os.path.join(carpeta, "ocr_resultados.json")
     if os.path.exists(ruta_ocr):
@@ -248,7 +265,6 @@ def generar_word(placa: str):
     ruta_word = os.path.join(carpeta, f"Hoja_Vida_{placa}.docx")
     doc.save(ruta_word)
 
-    # 🔥 Actualizar estado
     estado = {
         "word_generado": True,
         "fecha_generacion": datetime.now().isoformat()
@@ -257,7 +273,6 @@ def generar_word(placa: str):
     with open(os.path.join(carpeta, "estado.json"), "w", encoding="utf-8") as f:
         json.dump(estado, f, indent=4)
 
-    # 🔥 Renombrar carpeta si estaba pendiente
     if os.path.exists(carpeta_pendiente):
         os.rename(carpeta_pendiente, carpeta_ok)
         carpeta = carpeta_ok
