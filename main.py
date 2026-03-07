@@ -20,7 +20,8 @@ app.add_middleware(
     allow_origins=[
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://formulario-transporte-nueva-colombi.vercel.app"
+    "https://formulario-transporte-nueva-colombi.vercel.app",
+    "https://v0-resume-form-design.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
