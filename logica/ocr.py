@@ -1,10 +1,19 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware 
 import os
 import json
 import base64
 from openai import OpenAI
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex="https://.*\\.vercel\\.app",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
