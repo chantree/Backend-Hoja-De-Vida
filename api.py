@@ -15,12 +15,12 @@ import base64
 app = FastAPI()
 
 # =========================
-# CORS
+# CORS (CORREGIDO)
 # =========================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex="https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,7 +81,7 @@ def root():
 
 
 # =========================
-# UPLOAD (NECESARIO PARA FRONTEND)
+# UPLOAD
 # =========================
 
 @app.post("/upload")
@@ -101,7 +101,7 @@ async def upload(file: UploadFile = File(...)):
 
 
 # =========================
-# FUNCION GUARDAR IMAGEN
+# GUARDAR IMAGEN
 # =========================
 
 def guardar_imagen(data, ruta):
@@ -138,7 +138,7 @@ def guardar_imagen(data, ruta):
 
 
 # =========================
-# CREAR HOJA VIDA
+# REGISTRAR HOJA VIDA
 # =========================
 
 @app.post("/hoja-vida")
@@ -208,21 +208,6 @@ def obtener_ficha(placa: str):
     with open(ruta_datos, "r", encoding="utf-8") as f:
         datos = json.load(f)
 
-    ruta_ocr = os.path.join(carpeta, "ocr_resultados.json")
-    if os.path.exists(ruta_ocr):
-        with open(ruta_ocr, "r", encoding="utf-8") as f:
-            datos["ocr"] = json.load(f)
-
-    ruta_runt = os.path.join(carpeta, "runt_resultado.json")
-    if os.path.exists(ruta_runt):
-        with open(ruta_runt, "r", encoding="utf-8") as f:
-            datos["runt"] = json.load(f)
-
-    ruta_estado = os.path.join(carpeta, "estado.json")
-    if os.path.exists(ruta_estado):
-        with open(ruta_estado, "r", encoding="utf-8") as f:
-            datos["estado"] = json.load(f)
-
     return datos
 
 
@@ -235,15 +220,7 @@ def generar_word(placa: str):
 
     placa = placa.upper().replace(" ", "")
 
-    carpeta_pendiente = os.path.join(BASE_PATH, f"{placa}_PENDIENTE")
-    carpeta_ok = os.path.join(BASE_PATH, f"{placa}_OK")
-
-    if os.path.exists(carpeta_ok):
-        carpeta = carpeta_ok
-    elif os.path.exists(carpeta_pendiente):
-        carpeta = carpeta_pendiente
-    else:
-        return {"error": "Placa no encontrada"}
+    carpeta = os.path.join(BASE_PATH, f"{placa}_PENDIENTE")
 
     doc = Document()
 
@@ -259,34 +236,12 @@ def generar_word(placa: str):
         os.path.join(carpeta, "vehiculo", "foto_trasero.jpg"),
     ]
 
-    imagen_encontrada = False
-
     for img in imagenes:
         if os.path.exists(img):
             doc.add_picture(img, width=Inches(5))
             doc.add_page_break()
-            imagen_encontrada = True
-
-    if not imagen_encontrada:
-        return {"error": "No hay imágenes para esta placa"}
 
     ruta_word = os.path.join(carpeta, f"Hoja_Vida_{placa}.docx")
     doc.save(ruta_word)
 
-    estado = {
-        "word_generado": True,
-        "fecha_generacion": datetime.now().isoformat()
-    }
-
-    with open(os.path.join(carpeta, "estado.json"), "w", encoding="utf-8") as f:
-        json.dump(estado, f, indent=4)
-
-    if os.path.exists(carpeta_pendiente):
-        os.rename(carpeta_pendiente, carpeta_ok)
-        carpeta = carpeta_ok
-
-    return FileResponse(
-        os.path.join(carpeta, f"Hoja_Vida_{placa}.docx"),
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"Hoja_Vida_{placa}.docx"
-    )
+    return FileResponse(ruta_word)
