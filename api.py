@@ -20,8 +20,8 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex="https://.*\\.vercel\\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -47,6 +47,7 @@ class Propietario(BaseModel):
     documento: str
     telefono: str
     correo: str
+    direccion: str
 
 
 class Conductor(BaseModel):
@@ -56,6 +57,7 @@ class Conductor(BaseModel):
     documento: str
     celular: str
     correo: str
+    direccion: str
 
     foto_selfie: Optional[str] = None
     cedula_frontal: Optional[str] = None
@@ -208,6 +210,22 @@ def obtener_ficha(placa: str):
     with open(ruta_datos, "r", encoding="utf-8") as f:
         datos = json.load(f)
 
+    ruta_ocr = os.path.join(carpeta, "ocr_resultados.json")
+    if os.path.exists(ruta_ocr):
+        with open(ruta_ocr, "r", encoding="utf-8") as f:
+            datos["ocr"] = json.load(f)
+
+    ruta_runt = os.path.join(carpeta, "runt_resultado.json")
+    if os.path.exists(ruta_runt):
+        with open(ruta_runt, "r", encoding="utf-8") as f:
+            datos["runt"] = json.load(f)
+
+    ruta_estado = os.path.join(carpeta, "estado.json")
+    if os.path.exists(ruta_estado):
+        with open(ruta_estado, "r", encoding="utf-8") as f:
+            estado = json.load(f)
+            datos["word_generado"] = estado.get("word_generado", False)
+
     return datos
 
 
@@ -220,8 +238,17 @@ def generar_word(placa: str):
 
     placa = placa.upper().replace(" ", "")
 
-    carpeta = os.path.join(BASE_PATH, f"{placa}_PENDIENTE")
+    carpeta_ok = os.path.join(BASE_PATH, f"{placa}_OK")
+    carpeta_pendiente = os.path.join(BASE_PATH, f"{placa}_PENDIENTE")
 
+    if os.path.exists(carpeta_ok):
+        carpeta = carpeta_ok
+    elif os.path.exists(carpeta_pendiente):
+        carpeta = carpeta_pendiente
+    else:
+        return {"error": "Placa no encontrada"}
+
+    # Generar Word con las imagenes
     doc = Document()
 
     imagenes = [
@@ -241,7 +268,26 @@ def generar_word(placa: str):
             doc.add_picture(img, width=Inches(5))
             doc.add_page_break()
 
+    # Si estaba en PENDIENTE lo guardamos ahi temporalmente
     ruta_word = os.path.join(carpeta, f"Hoja_Vida_{placa}.docx")
     doc.save(ruta_word)
 
-    return FileResponse(ruta_word)
+    # Actualizar estado
+    ruta_estado = os.path.join(carpeta, "estado.json")
+    estado = {
+        "word_generado": True,
+        "fecha_generacion": datetime.now().isoformat()
+    }
+    with open(ruta_estado, "w", encoding="utf-8") as f:
+        json.dump(estado, f, indent=4)
+
+    # Renombrar carpeta de PENDIENTE a OK
+    if carpeta == carpeta_pendiente:
+        os.rename(carpeta_pendiente, carpeta_ok)
+        ruta_word = os.path.join(carpeta_ok, f"Hoja_Vida_{placa}.docx")
+
+    return FileResponse(
+        ruta_word,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=f"Hoja_Vida_{placa}.docx"
+    )

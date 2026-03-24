@@ -4,7 +4,6 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 import os
 import json
 import re
-import pdfplumber
 import requests
 import threading
 
@@ -21,6 +20,20 @@ app.add_middleware(
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 
 playwright_lock = threading.Lock()
+
+
+def extraer_campo(texto, *claves):
+    for clave in claves:
+        patron = re.search(
+            rf"{re.escape(clave)}\s*[:\-]?\s*([^\n]+)",
+            texto,
+            re.IGNORECASE
+        )
+        if patron:
+            valor = patron.group(1).strip()
+            if len(valor) > 0 and not valor.endswith(":"):
+                return valor
+    return ""
 
 
 @app.get("/validar/{placa}")
@@ -44,20 +57,14 @@ def validar_runt(placa: str):
     if not os.path.exists(ruta_datos):
         return {"error": "No existe datos.json"}
 
-    # ================================
-    # OCR AUTOMATICO
-    # ================================
     if not os.path.exists(ruta_ocr):
-
         print("OCR no encontrado. Ejecutando OCR...")
-
         try:
             response = requests.get(
                 f"http://127.0.0.1:8000/ocr/validar/{placa}",
                 timeout=300
             )
             print("Respuesta OCR:", response.json())
-
         except Exception as e:
             return {"error": f"Error ejecutando OCR: {str(e)}"}
 
@@ -77,28 +84,26 @@ def validar_runt(placa: str):
 
     tarjeta = ocr.get("tarjeta_propiedad", {})
     resultado = {}
+    datos_vehiculo = {}
+    rtm_actual = {}
+    rtm_lista = []
 
-    # ================================
-    # PLAYWRIGHT
-    # ================================
     with playwright_lock:
 
         with sync_playwright() as p:
 
-            browser = p.chromium.connect_over_cdp(
-                "http://127.0.0.1:9222"
-        )
-
+            browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
             context = browser.contexts[0]
 
             if len(context.pages) == 0:
                 page = context.new_page()
             else:
                 page = context.pages[0]
-            try:
 
+            try:
                 print("===================================")
                 print("Abriendo RUNT...")
+                print(f"Placa: {placa} | Documento: {documento}")
                 print("Resuelve el captcha manualmente.")
                 print("===================================")
 
@@ -109,144 +114,121 @@ def validar_runt(placa: str):
                 )
 
                 page.wait_for_timeout(5000)
-
                 page.wait_for_selector("input", timeout=60000)
 
+                # Llenar placa
                 placa_input = page.locator("input").first
                 placa_input.fill(placa)
                 placa_input.press("Tab")
+                page.wait_for_timeout(1000)
 
-                page.wait_for_timeout(2000)
+                # Llenar documento del propietario
+                try:
+                    doc_input = page.locator("input[formcontrolname='documento']").first
+                    if doc_input.count() > 0:
+                        doc_input.fill(documento)
+                        doc_input.press("Tab")
+                        page.wait_for_timeout(1000)
+                        print(f"Documento llenado: {documento}")
+                    else:
+                        print("Campo documento no encontrado, esperando captcha...")
+                except Exception as e:
+                    print(f"No se pudo llenar documento: {e}")
 
                 try:
                     page.wait_for_selector(
                         "text=Información general del vehículo",
-                        timeout=600000
+                        timeout=1800000
                     )
-
                 except PlaywrightTimeoutError:
                     return {"error": "No se completó captcha"}
 
                 print("Captcha resuelto.")
+                page.wait_for_timeout(2000)
 
-                datos = {}
+                acordeones = [
+                    "Información general del vehículo",
+                    "Certificado de revisión técnico mecánica y de emisiones contaminantes (RTM)",
+                ]
 
-                bloques = page.locator("div").all_inner_texts()
+                for texto_acordeon in acordeones:
+                    try:
+                        elem = page.locator(f"text={texto_acordeon}").first
+                        if elem.count() > 0:
+                            elem.click()
+                            page.wait_for_timeout(2000)
+                            print(f"Expandido: {texto_acordeon}")
+                    except Exception as e:
+                        print(f"No se pudo expandir '{texto_acordeon}': {e}")
 
-                for bloque in bloques:
+                texto_pagina = page.inner_text("body")
 
-                    lineas = bloque.split("\n")
-                    lineas = [l.strip() for l in lineas if l.strip()]
+                print(f"=== TEXTO PAGINA (primeros 2000 chars) ===")
+                for linea in texto_pagina[:2000].split("\n"):
+                    if linea.strip():
+                        print(linea.strip())
 
-                    for i in range(len(lineas) - 1):
+                datos_vehiculo = {
+                    "placa": extraer_campo(texto_pagina, "PLACA DEL VEHÍCULO", "PLACA DEL VEHICULO"),
+                    "marca": extraer_campo(texto_pagina, "MARCA"),
+                    "linea": extraer_campo(texto_pagina, "LÍNEA", "LINEA"),
+                    "modelo": extraer_campo(texto_pagina, "MODELO"),
+                    "color": extraer_campo(texto_pagina, "COLOR"),
+                    "clase": extraer_campo(texto_pagina, "CLASE DE VEHÍCULO", "CLASE DE VEHICULO"),
+                    "servicio": extraer_campo(texto_pagina, "TIPO DE SERVICIO"),
+                    "combustible": extraer_campo(texto_pagina, "TIPO COMBUSTIBLE", "COMBUSTIBLE"),
+                    "cilindraje": extraer_campo(texto_pagina, "CILINDRAJE"),
+                    "motor": extraer_campo(texto_pagina, "NÚMERO DE MOTOR", "NUMERO DE MOTOR"),
+                    "chasis": extraer_campo(texto_pagina, "NÚMERO DE CHASIS", "NUMERO DE CHASIS"),
+                    "vin": extraer_campo(texto_pagina, "NÚMERO DE VIN", "NUMERO DE VIN"),
+                    "carroceria": extraer_campo(texto_pagina, "TIPO DE CARROCERÍA", "TIPO DE CARROCERIA"),
+                }
 
-                        clave = lineas[i]
-                        valor = lineas[i + 1]
-
-                        if ":" in clave:
-                            datos[clave] = valor
+                print(f"Datos vehículo extraídos: {datos_vehiculo}")
 
                 # =============================
-                # RTM PDF
+                # RTM POR POSICION EN TABLA
                 # =============================
-                print("Buscando RTM...")
+                print("Extrayendo RTM de la página...")
 
-                acordeon_rtm = page.locator(
-                    "text=Certificado de revisión técnico mecánica"
-                ).first
-
+                lineas_pagina = [l.strip() for l in texto_pagina.split("\n") if l.strip()]
                 rtm_actual = {}
                 rtm_lista = []
 
-                if acordeon_rtm.count() > 0:
+                try:
+                    idx = lineas_pagina.index("REVISION TECNICO-MECANICO")
+                    rtm_actual = {
+                        "fecha_expedicion": lineas_pagina[idx + 1],
+                        "fecha_vencimiento": lineas_pagina[idx + 2],
+                        "centro_diagnostico": lineas_pagina[idx + 3],
+                        "vigente": lineas_pagina[idx + 4],
+                        "numero_certificado": lineas_pagina[idx + 5],
+                    }
+                    rtm_lista = [rtm_actual]
+                    print(f"RTM extraído: {rtm_actual}")
+                except (ValueError, IndexError) as e:
+                    print(f"No se encontró RTM: {e}")
 
-                    acordeon_rtm.click()
-                    page.wait_for_timeout(2000)
-
-                    boton_descarga = page.locator(
-                        "button[mattooltip='Descargar']"
-                    ).first
-
-                    if boton_descarga.count() > 0:
-
-                        with page.expect_download() as download_info:
-                            boton_descarga.click()
-
-                        download = download_info.value
-
-                        ruta_pdf = os.path.join(
-                            carpeta,
-                            "revision_tecnomecanica.pdf"
-                        )
-
-                        download.save_as(ruta_pdf)
-
-                        with pdfplumber.open(ruta_pdf) as pdf:
-
-                            texto = ""
-
-                            for pagina in pdf.pages:
-
-                                contenido = pagina.extract_text()
-
-                                if contenido:
-                                    texto += contenido + "\n"
-
-                        cda = re.search(
-                            r"Entidad\s+que\s+expide\s+el\s+certificado:\s*(.*)",
-                            texto,
-                            re.IGNORECASE
-                        )
-
-                        cert = re.search(
-                            r"No\.\s*([0-9]+)",
-                            texto,
-                            re.IGNORECASE
-                        )
-
-                        exp = re.search(
-                            r"Fecha\s*de\s*expedici[oó]n:\s*([0-9/]+)",
-                            texto,
-                            re.IGNORECASE
-                        )
-
-                        vig = re.search(
-                            r"Fecha\s*de\s*vencimiento:\s*([0-9/]+)",
-                            texto,
-                            re.IGNORECASE
-                        )
-
-                        if cda:
-                            rtm_actual["centro_diagnostico"] = cda.group(1).strip()
-
-                        if cert:
-                            rtm_actual["numero_certificado"] = cert.group(1).strip()
-
-                        if exp:
-                            rtm_actual["fecha_expedicion"] = exp.group(1)
-
-                        if vig:
-                            rtm_actual["fecha_vencimiento"] = vig.group(1)
-
-                        rtm_lista = [rtm_actual] if rtm_actual else []
+            except Exception as e:
+                print(f"Error general Playwright: {e}")
 
             finally:
                 pass
 
     resultado["runt"] = {
-        "placa": datos.get("PLACA DEL VEHÍCULO:", ""),
-        "marca": datos.get("MARCA:", ""),
-        "linea": datos.get("LÍNEA:", ""),
-        "modelo": datos.get("MODELO:", ""),
-        "color": datos.get("COLOR:", ""),
-        "clase": datos.get("CLASE DE VEHÍCULO:", ""),
-        "servicio": datos.get("TIPO DE SERVICIO:", ""),
-        "combustible": datos.get("TIPO COMBUSTIBLE:", ""),
-        "cilindraje": datos.get("CILINDRAJE:", ""),
-        "motor": datos.get("NÚMERO DE MOTOR:", ""),
-        "chasis": datos.get("NÚMERO DE CHASIS:", ""),
-        "vin": datos.get("NÚMERO DE VIN:", ""),
-        "carroceria": datos.get("TIPO DE CARROCERÍA:", ""),
+        "placa": datos_vehiculo.get("placa", placa),
+        "marca": datos_vehiculo.get("marca", ""),
+        "linea": datos_vehiculo.get("linea", ""),
+        "modelo": datos_vehiculo.get("modelo", ""),
+        "color": datos_vehiculo.get("color", ""),
+        "clase": datos_vehiculo.get("clase", ""),
+        "servicio": datos_vehiculo.get("servicio", ""),
+        "combustible": datos_vehiculo.get("combustible", ""),
+        "cilindraje": datos_vehiculo.get("cilindraje", ""),
+        "motor": datos_vehiculo.get("motor", ""),
+        "chasis": datos_vehiculo.get("chasis", ""),
+        "vin": datos_vehiculo.get("vin", ""),
+        "carroceria": datos_vehiculo.get("carroceria", ""),
         "revision_tecnomecanica": {
             "actual": rtm_actual,
             "historial": rtm_lista
