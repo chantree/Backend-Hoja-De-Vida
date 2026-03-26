@@ -156,7 +156,7 @@ def registrar_hoja_vida(data: Conductor):
     os.makedirs(os.path.join(carpeta_base, "propietario"), exist_ok=True)
 
     with open(os.path.join(carpeta_base, "datos.json"), "w", encoding="utf-8") as f:
-        json.dump(data.dict(), f, indent=4, ensure_ascii=False)
+        json.dump(data.model_dump(), f, indent=4, ensure_ascii=False)
 
     estado_inicial = {
         "word_generado": False,
