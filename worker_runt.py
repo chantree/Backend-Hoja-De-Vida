@@ -1,7 +1,7 @@
 import requests
 import time
 
-VPS_URL = "http://159.89.44.99:8000/cola"
+VPS_URL = "http://127.0.0.1:8000/api/cola"
 RUNT_URL = "http://127.0.0.1:8000/runt/validar"
 
 print("Worker iniciado...")
@@ -21,7 +21,7 @@ while True:
             print("Procesando placa:", placa)
 
             # llamar al backend local que hace el scraping
-            respuesta = requests.get(f"{RUNT_URL}/{placa}", timeout=600)
+            respuesta = requests.get(f"{RUNT_URL}/{placa}", timeout=1800)
 
             print("Respuesta RUNT:", respuesta.json())
 
