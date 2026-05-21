@@ -7,9 +7,12 @@ from logica.api_runt import app as runt_app
 from logica.api_sisconmp import app as sisconmp_app
 from logica.cola import router as cola_router
 from fastapi.middleware.cors import CORSMiddleware
+from logica.gestion import router as gestion_router
 import os
 
 app = FastAPI()
+
+app.include_router(gestion_router, prefix="/api/gestion")
 
 app.include_router(cola_router)
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
