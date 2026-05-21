@@ -21,7 +21,7 @@ BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex="https://.*\.vercel\.app",
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
