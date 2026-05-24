@@ -31,6 +31,8 @@ class ReckittRecord(BaseModel):
     fechaEntrega: Optional[str] = None
     enRuta: bool = False
     otros: str = ""
+    telefono: str = ""        
+    guiaEnviada: bool = False 
 
 class FatecoRecord(BaseModel):
     id: Optional[str] = None
