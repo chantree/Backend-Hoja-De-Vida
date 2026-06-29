@@ -4,6 +4,7 @@ from typing import Optional
 import json
 import os
 import uuid
+from bs4 import BeautifulSoup
 
 router = APIRouter()
 
@@ -120,36 +121,44 @@ def save_plantillas(data: list[str]):
     return data
 
 import httpx
-from bs4 import BeautifulSoup
+
+
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import threading
+
+guia_lock = threading.Lock()
 
 @router.get("/guia/{numero}")
-async def consultar_guia(numero: str):
+def consultar_guia(numero: str):
     try:
-        url = f"https://www.servientrega.com/wps/portal/rastreo-envio"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
-        }
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                "https://www.servientrega.com/wps/portal/rastreo-envio",
-                data={"guia": numero, "tipoConsulta": "1"},
-                headers=headers,
-                follow_redirects=True
-            )
-            soup = BeautifulSoup(resp.text, "html.parser")
-            
-            # Buscar estado principal
-            estado_el = soup.find(class_="estado-envio") or soup.find(class_="title-estado")
-            estado = estado_el.get_text(strip=True) if estado_el else None
-            
-            # Buscar ciudad destino
-            ciudad_el = soup.find(class_="ciudad-destino") or soup.find(string=lambda t: t and "Bucaramanga" in t)
-            ciudad = ciudad_el.get_text(strip=True) if hasattr(ciudad_el, 'get_text') else str(ciudad_el) if ciudad_el else None
-            
-            if estado:
-                return {"estado": estado, "ciudad": ciudad, "guia": numero}
-            else:
-                return {"estado": "No encontrado", "ciudad": None, "guia": numero}
+        with guia_lock:
+            with sync_playwright() as p:
+                browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+                context = browser.contexts[0]
+                page = context.new_page()
+                try:
+                    page.goto(
+                        f"https://www.servientrega.com/wps/portal/rastreo-envio",
+                        wait_until="domcontentloaded",
+                        timeout=30000
+                    )
+                    page.wait_for_timeout(2000)
+                    
+                    # Llenar número de guía
+                    page.fill("input[type='text']", numero)
+                    page.click("button[type='submit'], .btn-consultar, button:has-text('Consultar')")
+                    page.wait_for_timeout(4000)
+                    
+                    texto = page.inner_text("body")
+                    
+                    estado = "No encontrado"
+                    for keyword in ["ENTREGADO", "EN RUTA", "RECIBIDO", "EN DISTRIBUCIÓN", "DEVUELTO"]:
+                        if keyword in texto.upper():
+                            estado = keyword
+                            break
+                    
+                    return {"estado": estado, "guia": numero}
+                finally:
+                    page.close()
     except Exception as e:
-        return {"estado": "Error consultando", "ciudad": None, "guia": numero, "error": str(e)}
+        return {"estado": "Error", "guia": numero, "error": str(e)}

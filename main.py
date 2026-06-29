@@ -12,7 +12,7 @@ import os
 
 app = FastAPI()
 
-app.include_router(gestion_router, prefix="/gestion")
+app.include_router(gestion_router, prefix="/api/gestion")
 
 app.include_router(cola_router)
 BASE_PATH = os.getenv("BASE_PATH", "/home/backend/vehiculos")
