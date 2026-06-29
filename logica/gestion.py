@@ -97,3 +97,24 @@ def delete_fateco(id: str):
     data = [r for r in data if r["id"] != id]
     guardar(FATECO_FILE, data)
     return {"ok": True}
+
+PLANTILLAS_FILE = "/home/backend/gestion/plantillas.json"
+
+PLANTILLAS_DEFAULT = [
+    "Prueba mensaje aviso 1",
+    "Prueba mensaje aviso 2", 
+    "Prueba mensaje aviso 3",
+]
+
+@router.get("/plantillas")
+def get_plantillas():
+    if not os.path.exists(PLANTILLAS_FILE):
+        return PLANTILLAS_DEFAULT
+    with open(PLANTILLAS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+@router.post("/plantillas")
+def save_plantillas(data: list[str]):
+    with open(PLANTILLAS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
