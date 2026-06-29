@@ -118,3 +118,38 @@ def save_plantillas(data: list[str]):
     with open(PLANTILLAS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return data
+
+import httpx
+from bs4 import BeautifulSoup
+
+@router.get("/guia/{numero}")
+async def consultar_guia(numero: str):
+    try:
+        url = f"https://www.servientrega.com/wps/portal/rastreo-envio"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                "https://www.servientrega.com/wps/portal/rastreo-envio",
+                data={"guia": numero, "tipoConsulta": "1"},
+                headers=headers,
+                follow_redirects=True
+            )
+            soup = BeautifulSoup(resp.text, "html.parser")
+            
+            # Buscar estado principal
+            estado_el = soup.find(class_="estado-envio") or soup.find(class_="title-estado")
+            estado = estado_el.get_text(strip=True) if estado_el else None
+            
+            # Buscar ciudad destino
+            ciudad_el = soup.find(class_="ciudad-destino") or soup.find(string=lambda t: t and "Bucaramanga" in t)
+            ciudad = ciudad_el.get_text(strip=True) if hasattr(ciudad_el, 'get_text') else str(ciudad_el) if ciudad_el else None
+            
+            if estado:
+                return {"estado": estado, "ciudad": ciudad, "guia": numero}
+            else:
+                return {"estado": "No encontrado", "ciudad": None, "guia": numero}
+    except Exception as e:
+        return {"estado": "Error consultando", "ciudad": None, "guia": numero, "error": str(e)}
